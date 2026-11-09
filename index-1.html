@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#07111f">
+<meta name="description" content="Explore Earth in 3D with satellite imagery and GPS location.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<title>My 3D World</title>
+<link href="https://cesium.com/downloads/cesiumjs/releases/1.146/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+<style>
+:root{color-scheme:dark;--bg:#07111f;--panel:#101d2d;--line:#26384c;--text:#f4f7fb;--muted:#a9bacb;--accent:#65d6c4}
+*{box-sizing:border-box}html,body,#globe{width:100%;height:100%;margin:0;overflow:hidden;background:var(--bg);font-family:system-ui,-apple-system,Segoe UI,sans-serif}
+#globe{position:absolute;inset:0}.cesium-viewer-bottom{bottom:5px!important}.cesium-viewer-toolbar{display:none}
+.top{position:absolute;z-index:5;top:env(safe-area-inset-top,10px);left:12px;right:12px;display:flex;align-items:center;justify-content:space-between;pointer-events:none}
+.brand,.status{background:#07111fe8;border:1px solid #31465c;border-radius:14px;padding:9px 12px;box-shadow:0 8px 25px #0006;pointer-events:auto}
+.brand strong{display:block;font-size:15px;letter-spacing:.3px}.brand small,.status{color:var(--muted);font-size:11px}
+.panel{position:absolute;z-index:6;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));background:#0a1726ed;border:1px solid var(--line);border-radius:18px;padding:12px;box-shadow:0 12px 35px #0008;backdrop-filter:blur(12px)}
+.searchrow{display:flex;gap:8px}.searchrow input,.keyrow input{min-width:0;flex:1;background:#122337;border:1px solid #344b63;border-radius:11px;color:var(--text);padding:12px;font-size:14px;outline:none}
+button{border:0;border-radius:11px;padding:11px 13px;background:#1c3449;color:white;font-weight:650;font-size:13px}
+button.primary{background:var(--accent);color:#06211f}.buttons{display:flex;gap:8px;margin-top:9px}.buttons button{flex:1}
+.keybox{margin-top:10px;border-top:1px solid #26384c;padding-top:9px}.keybox summary{font-size:12px;color:var(--muted);cursor:pointer}.keyrow{display:flex;gap:8px;margin-top:8px}.hint{font-size:11px;color:var(--muted);line-height:1.4;margin:7px 1px 0}
+#message{font-size:11px;color:var(--accent);min-height:15px;margin-top:7px}
+@media(min-width:700px){.panel{left:18px;right:auto;width:380px;bottom:18px}.top{left:18px;right:18px}.brand{min-width:190px}}
+</style>
+</head>
+<body>
+<div id="globe"></div>
+<div class="top">
+ <div class="brand"><strong>🌍 My 3D World</strong><small>Explore Earth • Satellite view</small></div>
+ <div class="status" id="status">Map not connected</div>
+</div>
+<div class="panel">
+ <div class="searchrow">
+  <input id="place" placeholder="Search a place or address" autocomplete="off">
+  <button class="primary" id="search">Search</button>
+ </div>
+ <div class="buttons">
+  <button id="locate">◎ My location</button>
+  <button id="home">🌐 Whole Earth</button>
+  <button id="tilt">3D view</button>
+ </div>
+ <details class="keybox" open>
+  <summary>Connect your MapTiler key</summary>
+  <div class="keyrow">
+   <input id="apiKey" type="password" placeholder="Paste your MapTiler API key" autocomplete="off">
+   <button class="primary" id="connect">Connect</button>
+  </div>
+  <p class="hint">Paste your key here on your own device. It stays in this page's memory and is not saved by this app. For a public release, restrict the key to your website domain in MapTiler settings.</p>
+ </details>
+ <div id="message">Paste your key and tap Connect to load satellite imagery.</div>
+</div>
+<script src="https://cesium.com/downloads/cesiumjs/releases/1.146/Build/Cesium/Cesium.js"></script>
+<script>
+(() => {
+ const $ = id => document.getElementById(id);
+ let viewer, key = "", userMarker;
+ try {
+  viewer = new Cesium.Viewer("globe", {
+   animation:false,timeline:false,baseLayerPicker:false,geocoder:false,
+   homeButton:false,sceneModePicker:false,navigationHelpButton:false,
+   fullscreenButton:false,infoBox:false,selectionIndicator:false,
+   scene3DOnly:true,shouldAnimate:true,
+   baseLayer:false,
+   terrain: new Cesium.EllipsoidTerrainProvider()
+  });
+  viewer.scene.globe.enableLighting = true;
+  viewer.scene.screenSpaceCameraController.minimumZoomDistance = 80;
+  viewer.camera.setView({destination:Cesium.Cartesian3.fromDegrees(18.42,-33.92,18000000)});
+ } catch(e) { $("message").textContent="Could not start the 3D globe. Check your internet connection and reload."; return; }
+
+ function say(text){$("message").textContent=text;}
+ function connect(){
+  const candidate=$("apiKey").value.trim();
+  if(!candidate){say("Paste your MapTiler API key first.");return;}
+  key=candidate;
+  try {
+   const imagery=new Cesium.UrlTemplateImageryProvider({
+    url:"https://api.maptiler.com/maps/satellite-v4/{z}/{x}/{y}.jpg?key="+encodeURIComponent(key),
+    credit:"© MapTiler © OpenStreetMap contributors",
+    maximumLevel:20
+   });
+   viewer.imageryLayers.removeAll();
+   viewer.imageryLayers.addImageryProvider(imagery);
+   imagery.readyPromise.then(()=> {
+    $("status").textContent="Satellite connected";
+    say("Satellite imagery connected. Drag to rotate; pinch or use the controls to zoom.");
+   }).catch(()=>{ $("status").textContent="Connection issue";say("MapTiler could not load the imagery. Check the key, its permissions, and your MapTiler plan.");});
+   $("status").textContent="Connecting…";
+  } catch(e){say("Could not connect. Check the API key.");}
+ }
+ $("connect").addEventListener("click",connect);
+ $("home").addEventListener("click",()=>viewer.camera.flyTo({destination:Cesium.Cartesian3.fromDegrees(0,15,24000000),duration:2}));
+ $("tilt").addEventListener("click",()=>{
+  const c=viewer.camera.positionCartographic;
+  viewer.camera.flyTo({destination:Cesium.Cartesian3.fromRadians(c.longitude,c.latitude,Math.max(c.height,2500)),orientation:{heading:viewer.camera.heading,pitch:Cesium.Math.toRadians(-35),roll:0},duration:1.2});
+ });
+ $("locate").addEventListener("click",()=>{
+  if(!navigator.geolocation){say("GPS location is not supported by this browser.");return;}
+  say("Requesting location permission…");
+  navigator.geolocation.getCurrentPosition(pos=>{
+   const lon=pos.coords.longitude,lat=pos.coords.latitude;
+   if(userMarker)viewer.entities.remove(userMarker);
+   userMarker=viewer.entities.add({position:Cesium.Cartesian3.fromDegrees(lon,lat),point:{pixelSize:13,color:Cesium.Color.AQUA,outlineColor:Cesium.Color.WHITE,outlineWidth:2},label:{text:"You are here",font:"13px sans-serif",pixelOffset:new Cesium.Cartesian2(0,-22),fillColor:Cesium.Color.WHITE,outlineColor:Cesium.Color.BLACK,outlineWidth:3,style:Cesium.LabelStyle.FILL_AND_OUTLINE}});
+   viewer.camera.flyTo({destination:Cesium.Cartesian3.fromDegrees(lon,lat,3500),duration:2});
+   say("Your location is shown. GPS accuracy: about "+Math.round(pos.coords.accuracy)+" metres.");
+  },err=>say(err.code===1?"Location permission was not granted. You can enable it in Chrome site settings.":"Could not get your location. Check GPS and try again."),{enableHighAccuracy:true,timeout:15000,maximumAge:5000});
+ });
+ async function searchPlace(){
+  const q=$("place").value.trim();
+  if(!q){say("Enter a place name first.");return;}
+  if(!key){say("Connect your MapTiler key before searching.");return;}
+  say("Searching…");
+  try{
+   const url="https://api.maptiler.com/geocoding/"+encodeURIComponent(q)+".json?key="+encodeURIComponent(key)+"&limit=1";
+   const response=await fetch(url);
+   if(!response.ok)throw new Error("Search request failed");
+   const data=await response.json();
+   if(!data.features||!data.features.length){say("No matching place found. Try another spelling.");return;}
+   const f=data.features[0],[lon,lat]=f.center;
+   viewer.camera.flyTo({destination:Cesium.Cartesian3.fromDegrees(lon,lat,5000),duration:2});
+   say("Showing: "+(f.place_name||q));
+  }catch(e){say("Place search failed. Check your key and internet connection.");}
+ }
+ $("search").addEventListener("click",searchPlace);
+ $("place").addEventListener("keydown",e=>{if(e.key==="Enter")searchPlace();});
+ if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
+   navigator.serviceWorker.register("./service-worker.js").catch(()=>{});
+ }
+})();
+</script>
+</body>
+</html>

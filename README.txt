@@ -1,7 +1,7 @@
 MY 3D WORLD — ANDROID INSTALLABLE WEB APP
 
 Files:
-- index.html: the app
+-index.html : the app
 - manifest.webmanifest: install metadata and icon references
 - service-worker.js: caches the app shell for repeat visits
 - icons/: app icons
